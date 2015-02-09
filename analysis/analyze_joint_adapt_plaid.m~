@@ -1,0 +1,148 @@
+function stuff = analyze_joint_adapt_plaid(files, varargin)
+    contrasts_P = []; %plaid
+    contrasts_N = []; %not plaid
+    correct_P = [];
+    correct_N = [];
+    boot = 100;
+    output_file = ''
+    if numel(varargin) > 0
+        output_file = varargin{1}
+    end
+
+    for i=1:numel(files)
+        dat = load(files{i});
+        if dat.data.p.plaid == 1
+            contrasts_P = [contrasts_P, dat.data.contrast];
+            correct_P = [correct_P, dat.data.correct];
+        else dat.data.p.plaid == 0 
+            contrasts_N = [contrasts_N, dat.data.contrast]; 
+            correct_N = [correct_N, dat.data.correct];
+        end
+    end
+
+    [xn, yn, yn_correct, yn_outof] = get_pct(contrasts_N, correct_N);
+    [xp, yp, yp_correct, yp_outof] = get_pct(contrasts_P, correct_P);
+
+    xedge = 0.05;%how far past given values to plot
+    yedge = 0.05;
+    %get fits
+    
+    if numel(xn)
+        %wpn = find_weib_fit(xn, yn,[0.1,3]);
+        [wpn, sdn, bwpn] = find_weib_fit2(xn,yn_correct, yn_outof, boot);        
+        
+        xsn = linspace(0, max(xn)+xedge, 50);
+    end
+    if numel(xp)
+        %wpp = find_weib_fit(xp, yp,[0.1,3]);
+        [wpp, sdp, bwpp] = find_weib_fit2(xp,yp_correct, yp_outof, boot);
+        
+        xsp = linspace(0, max(xp)+xedge, 50);
+    end
+
+    
+    %NOW COMES PLOTTING CODE
+
+    c1 = [0.5,0.0,0.5];
+    c2 = [0,0.5,0.5];
+
+    ms = 10; %base marker size
+    fs = 18
+    
+    
+
+    for i=1:numel(xn)
+            
+        ms_i = ms + 10*yn_outof(i) / max(yn_outof);
+        h=plot(xn(i), yn(i), 'o','color',c1);
+        if i == 1
+            l1 = h; %save for legend
+        end
+        set(h, 'MarkerSize',ms_i);
+        set(h, 'MarkerFaceColor',c1);
+        hold on     
+    end
+    for i=1:numel(xp)
+        ms_i = ms + 10*yp_outof(i) / max(yp_outof);
+        h=plot(xp(i), yp(i), 'o','color',c1);
+        if i == 1
+            l2 = h; %save for legend
+        end
+        set(h, 'MarkerSize',ms_i)
+        set(h, 'MarkerFaceColor',c2)
+        hold on     
+    end
+    %h=plot(xp, yp, 'o','color',c2);
+    set(h, 'MarkerSize',ms)
+    set(h, 'MarkerFaceColor',c2)
+    if numel(xn) && numel(xp)
+        [h1, h2]=legend([l1, l2], 'G', 'P','Location','East');
+    %now do some crap to stop the legend from overflowing    
+        set(h1, 'fontsize',fs)
+        set(h1, 'String', {'G    ','P    '})
+    elseif numel(xn)
+        [h1]=legend([l1], 'G','Location','East');
+    %now do some crap to stop the legend from overflowing    
+        set(h1, 'fontsize',fs)
+        set(h1, 'String', {'G    '})
+    elseif numel(xp)
+        [h1]=legend([l2], 'P','Location','East');
+    %now do some crap to stop the legend from overflowing    
+        set(h1, 'fontsize',fs)
+        set(h1, 'String', {'P    '})
+
+    end
+    axis([0, max([xp xn])+xedge, min([yn, yp])-yedge, 1+yedge])
+    %plot fits
+    if numel(xn)
+        %ysn = 0.5*wpn(3) + (1-wpn(3))*weibull(wpn(1), wpn(2), xsn);
+        ysn = PAL_Weibull(wpn, xsn)
+        h = plot(xsn, ysn, 'color',c1);
+        %plot the threshold with possible error bars
+        set('h','LineWidth',2)     ;
+        h = plot([wpn(1), wpn(1)], [min([yn, yp])-yedge, 1+yedge],'--','color',c1)
+        set(h,'LineWidth',2)
+        if boot
+            h = plot([wpn(1), wpn(1)]+sdn(1), [min([yn, yp])-yedge, 1+yedge],'--','color',c1)
+            set(h,'LineWidth',1)
+            h = plot([wpn(1), wpn(1)]-sdn(1), [min([yn, yp])-yedge, 1+yedge],'--','color',c1)
+            set(h,'LineWidth',1)
+        end
+    end    
+    if numel(xp)
+        %ysp = 0.5*wpp(3) + (1-wpp(3))*weibull(wpp(1), wpp(2), xsp);
+        ysp = PAL_Weibull(wpp, xsp);
+        
+        h = plot(xsp, ysp, 'color',c2);
+        set(h,'LineWidth',2)    ; 
+        %plot the threshold with possible error bars
+        h = plot([wpp(1), wpp(1)], [min([yn, yp])-yedge, 1+yedge],'--','color',c2)
+        set(h,'LineWidth',2)
+        if boot
+            h = plot([wpp(1), wpp(1)]+sdp(1), [min([yn, yp])-yedge, 1+yedge],'--','color',c2)
+            set(h,'LineWidth',1)
+            h = plot([wpp(1), wpp(1)]-sdp(1), [min([yn, yp])-yedge, 1+yedge],'--','color',c2)
+            set(h,'LineWidth',1)
+        end
+
+    end    
+    h=xlabel('contrast increment')
+    set(h, 'FontSize',fs)
+    h=ylabel('percent correct')
+    set(h, 'FontSize',fs)
+    set(gca,'FontSize',fs)
+
+    if numel(varargin)
+        print(gcf, '-depsc2', output_file);
+    end
+    
+end
+
+
+%get pct correct
+function [ux, pct, correct, outof] = get_pct(x, b)
+    ux = unique(x);
+    pct = arrayfun(@(uxv) mean(b(x == uxv)), ux);
+    correct = arrayfun(@(uxv) sum(b(x == uxv)), ux);
+    outof = arrayfun(@(uxv) numel(b(x == uxv)), ux);
+end
