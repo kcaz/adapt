@@ -31,12 +31,12 @@ function p = params
     %timing control
     %all times are in seconds
     p.pre_adapt_switches = 100;
-    p.top_up_switches = 6;
-    p.switch_duration = 1.0;
-    p.switch_gap_duration = 2/60;
-    p.top_up_gap = 0.25;
+    p.top_up_switches = 10;
+    p.switch_duration = 0.2;
+    p.switch_gap_duration = 2/p.screen.framerate;
+    p.top_up_gap = 0.15;
     p.post_gap = 0.25;
-    p.stim_duration = 0.2;
+    p.stim_duration = 0.1;
     
     %how many trials?
     p.trials_per_cond = 50;%this is trials per staircase

@@ -5,8 +5,15 @@ function joint_adapt_plaid(initials, plaid)
     params_dir = [data_dir, '/', 'p'];
     load(params_dir) %loads a struct called p
     
-    init_mgl(p.screen);
-    data.start_time = mglGetSecs();%creates a data
+    [window, windowRect, imageRect, destRect] = init_ptb(p.screen);
+
+    %rectangles for putting things!
+    left = destRect - [1,0,1,0]*round(p.stim_pos * p.screen.pixperdegree);
+    right = destRect + [1,0,1,0]*round(p.stim_pos * p.screen.pixperdegree);
+    crossRect = CenterRect([0, 0, size(p.fcross)], windowRect);
+    
+    
+    data.start_time = GetSecs();%creates a data
     
     p.plaid = plaid;
     p.data_dir = data_dir;
@@ -28,9 +35,9 @@ function joint_adapt_plaid(initials, plaid)
     rcos_mask = raised_cosine(p.sizeimg, p.stim_rad, p.stim_rad+p.stim_ramp);     
 
     %fixation cross textures
-    fcr_tex = mglCreateTexture(p.fcross_red);
-	fcg_tex = mglCreateTexture(p.fcross_green);
-    fcw_tex = mglCreateTexture(p.fcross_white);
+    fcr_tex = Screen('MakeTexture', window, p.fcross_red);
+	fcg_tex = Screen('MakeTexture', window, p.fcross_green); 
+    fcw_tex = Screen('MakeTexture', window, p.fcross_white); 
 
 
     correct = [];
@@ -39,12 +46,16 @@ function joint_adapt_plaid(initials, plaid)
     stimside = [];
 
     run_adapter(p.pre_adapt_switches, p, rcos_mask);
-    mglClearScreen; mglFlush; mglWaitSecs(p.top_up_gap);
+    
+    Screen('FillRect',window,[128,128,128],windowRect); 
+    Screen('Flip',window); 
+    WaitSecs(p.top_up_gap);
 
     for trial = 1:size(conditions, 2)
         run_adapter(p.top_up_switches, p, rcos_mask);
-        mglClearScreen; mglFlush;
-        mglWaitSecs(p.top_up_gap);
+        Screen('FillRect',window,[128,128,128],windowRect); 
+        Screen('Flip',window)
+        WaitSecs(p.top_up_gap);
         
 
         st = conditions(1, trial);
@@ -73,31 +84,42 @@ function joint_adapt_plaid(initials, plaid)
         present_stim = rcos_mask .* ((p.base_contrast + contr) * ori1_grating + p.mask_contrast * ori2_grating);
         absent_stim  = rcos_mask .* ((p.base_contrast +     0) * ori1_grating + p.mask_contrast * ori2_grating);
     
-        tex_pr = mglCreateTexture(round(128 + 127*present_stim));
-        tex_ab = mglCreateTexture(round(128 + 127* absent_stim));
-        mglClearScreen;
-        if side == 1
-            mglBltTexture(tex_pr, p.left);
-            mglBltTexture(tex_ab, p.right);        
-        elseif side == 2
-            mglBltTexture(tex_pr, p.right);
-            mglBltTexture(tex_ab, p.left);        
-        end
-        mglFlush;
-        mglWaitSecs(p.stim_duration);
-        mglClearScreen; mglBltTexture(fcw_tex, p.center); mglFlush;
+        tex_pr = Screen('MakeTexture',window, round(128 + 127*present_stim));
+        tex_ab = Screen('MakeTexture',window, round(128 + 127*absent_stim));
+
+        Screen('FillRect',window,[128,128,128],windowRect); 
         
+        if side == 1
+            %Screen('DrawTexture',window,LineupTexture,[],destRect); 
+            Screen('DrawTexture',window, tex_pr, [], left)
+            Screen('DrawTexture',window, tex_ab,[], right)        
+        elseif side == 2
+            Screen('DrawTexture',window, tex_pr, [], right)
+            Screen('DrawTexture',window, tex_ab, [], left)               
+        end
+        Screen('Flip',window);
+        WaitSecs(p.stim_duration);
+        Screen('FillRect',window,[128,128,128],windowRect); 
+        Screen('DrawTexture',window, fcw_tex, [], crossRect)
+        Screen('Flip',window)
+        Screen('Close', tex_pr);
+        Screen('Close', tex_ab);
         %now get feedback
-        k = [];
-        while ~any(k)
-            k = mglGetKeys(p.keys);
-            resp = find(k, 1);
+        k = -1;
+        while ~ any(k==p.keys)
+            [~, k_codes] = KbWait();
+            k = find(k_codes);
         end
-        k
-        if resp==3
-            mglClose();
+        
+        if k == p.keys(3)
+            Screen('CloseAll');
             break;
+        elseif k == p.keys(1)
+            resp = 1;
+        elseif k == p.keys(2)
+            resp = 2;
         end
+        
         contrast = [contrast, contr];
         response = [response resp-1];
         stimside = [stimside, side];
@@ -112,66 +134,78 @@ function joint_adapt_plaid(initials, plaid)
 
         %give feedback, then wait post_gap seconds
 		if corr
-			mglBltTexture(fcg_tex, p.center); mglFlush;
-		else
-			mglBltTexture(fcr_tex, p.center); mglFlush;
+            Screen('FillRect',window,[128,128,128],windowRect); 
+            Screen('DrawTexture',window, fcg_tex, [], crossRect)
+            Screen('Flip',window)
+			
+        else
+            Screen('FillRect',window,[128,128,128],windowRect); 
+            Screen('DrawTexture',window, fcr_tex, [], crossRect)
+            Screen('Flip',window)
+			
 		end
-		mglWaitSecs(p.post_gap)
+		WaitSecs(p.post_gap)
     end    
     %now add all the stuff to data
-    end_time = mglGetSecs();
+    end_time = GetSecs();
     data.contrast = contrast;
     data.response = response;
     data.stimside = stimside;
     data.conditions = conditions;
     data.correct = correct;
     save_new(data);
-end
 
-function run_adapter(swaps, p, rcos_mask)
-    t_o = round(rand); %offset for swap
-    fcw_tex = mglCreateTexture(p.fcross_white);
-    for t = 1:swaps
-        
-        ori1_grating = mksinewave(p.component_contrast, p.sf, p.ori, 360*rand, p.screen.pixperdegree, p.sizeimg);
-        ori2_grating = mksinewave(p.component_contrast, p.sf, -p.ori, 360*rand, p.screen.pixperdegree, p.sizeimg);
-    
-        if p.plaid == 1 %normal plaid condition
-            if mod(t+t_o, 2) == 0
-                adp_plaid = rcos_mask .* (ori1_grating + ori2_grating);                            
-            else
-                adp_plaid = rcos_mask .* 0;
-            end            
-        elseif p.plaid == 0 %grating condition
-            if mod(t+t_o, 2) == 0
-                adp_plaid = rcos_mask .* ori1_grating;
-            else
-                adp_plaid = rcos_mask .* ori2_grating;
+    %nested function for access to local variables
+    function run_adapter(swaps, p, rcos_mask)
+        t_o = round(rand); %offset for swap
+
+        for t = 1:swaps
+
+            ori1_grating = mksinewave(p.component_contrast, p.sf, p.ori, 360*rand, p.screen.pixperdegree, p.sizeimg);
+            ori2_grating = mksinewave(p.component_contrast, p.sf, -p.ori, 360*rand, p.screen.pixperdegree, p.sizeimg);
+
+            if p.plaid == 1 %normal plaid condition
+                if mod(t+t_o, 2) == 0
+                    adp_plaid = rcos_mask .* (ori1_grating + ori2_grating);                            
+                else
+                    adp_plaid = rcos_mask .* 0;
+                end            
+            elseif p.plaid == 0 %grating condition
+                if mod(t+t_o, 2) == 0
+                    adp_plaid = rcos_mask .* ori1_grating;
+                else
+                    adp_plaid = rcos_mask .* ori2_grating;
+                end
+            elseif p.plaid == 2 %white noise condition
+                adp_plaid = 1-2*rand(size(ori1_grating));
+                targ_rms = sqrt(mean((ori1_grating + ori2_grating).^2));
+                curr_rms = sqrt(mean(adp_plaid.^2));
+                adp_plaid = (targ_rms/curr_rms) * adp_plaid .* rcos_mask;
             end
-        elseif p.plaid == 2 %white noise condition
-            adp_plaid = 1-2*rand(size(ori1_grating));
-            targ_rms = sqrt(mean((ori1_grating + ori2_grating).^2));
-            curr_rms = sqrt(mean(adp_plaid.^2));
-            adp_plaid = (targ_rms/curr_rms) * adp_plaid .* rcos_mask;
+            adp_tex = Screen('MakeTexture',window,uint8(128 + 127*adp_plaid));
+           
+            for f = 1:p.switch_frames
+                Screen('FillRect',window,[128,128,128],windowRect); 
+                Screen('DrawTexture',window, fcw_tex, [], crossRect);
+                Screen('DrawTexture',window, adp_tex, [],left);
+                Screen('DrawTexture',window, adp_tex, [], right);
+                
+                Screen('Flip',window) 
+            end
+            
+            for f = 1:p.switch_gap_frames
+                Screen('FillRect',window,[128,128,128],windowRect);
+                Screen('DrawTexture',window, fcw_tex, [], crossRect)
+                Screen('FillRect',window,[128,128,128],windowRect);
+                Screen('DrawTexture',window, fcw_tex, [], crossRect)
+                Screen('Flip',window)
+            end
+            Screen('Close',adp_tex);
         end
-
-        adp_tex = mglCreateTexture(round(128 + 127*adp_plaid));
-        for f = 1:p.switch_frames
-            mglClearScreen; 
-            mglBltTexture(fcw_tex, p.center);
-            mglBltTexture(adp_tex, p.left); 
-            mglBltTexture(adp_tex, p.right);
-            mglFlush;
-        end    
-        for f = 1:p.switch_gap_frames
-            mglClearScreen;             
-            mglBltTexture(fcw_tex, p.center);
-            mglFlush;
-        end
-        mglDeleteTexture(adp_tex);
     end
-    mglDeleteTexture(fcw_tex);
 end
+
+
 
 %finds a new name in the current directory to save to
 function save_new(data)
