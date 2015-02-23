@@ -1,6 +1,6 @@
 function screen = init_screen(screen)
-	screen.table = load('calibbrownie15mar2012.mat');
-	screen.table = screen.table.lut.table; %erg
+    load gammaTable1
+	screen.table = gammaTable1;
 	screen.distance = 64.5;
 	screen.dimcm = [34.8 26.1];
 	screen.screendims = [1024 768]; 

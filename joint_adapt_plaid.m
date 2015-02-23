@@ -224,4 +224,3 @@ function save_new(data)
     end
     save(candidate, 'data')
 end
-

@@ -1,6 +1,6 @@
 function p = params
-    p.savename = 'default'
-    p.screen = laptop_screen;
+    p.savename = 'default';
+    p.screen = init_screen;%laptop_screen;
     
     %stimulus layout
     p.center = round(p.screen.screendims/2);
@@ -24,7 +24,9 @@ function p = params
     
     %control of contrast
     p.mask_contrast = 0.7;
-    p.contrasts = logspace(log10(0.015), log10(0.3),9); %this is the contrast increments
+    p.base = 0.15;
+    p.contrasts = logspace(log10(0.015), log10(0.15),4); %this is the contrast increments
+    p.contrasts = [-p.contrasts, 0, p.contrasts];
     p.component_contrast = 0.45;
     p.base_contrast = 0.0; %pedestal for detection    
 
@@ -51,10 +53,10 @@ function p = params
     p.switch_gap_frames = round(p.screen.framerate * p.switch_gap_duration);
     
     %response control
-    p.keys = [11, 12, 25]; %left, right, quit
+    p.keys = [30,31,20];%[11, 12, 25]; %left, right, quit
     
     %this parameter needs to be set by the experiment
     p.plaid = nan;
-    save p
+    save('p','p')
 
 end
